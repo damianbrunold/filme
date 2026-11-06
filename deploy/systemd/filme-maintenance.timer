@@ -1,0 +1,11 @@
+[Unit]
+Description=Run filme maintenance nightly
+
+[Timer]
+OnCalendar=*-*-* 03:30:00
+RandomizedDelaySec=10min
+Persistent=true
+Unit=filme-maintenance.service
+
+[Install]
+WantedBy=timers.target

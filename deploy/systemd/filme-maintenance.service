@@ -1,0 +1,15 @@
+[Unit]
+Description=filme maintenance (purge stale uploads and old trash)
+
+[Service]
+Type=oneshot
+User=filme
+Group=filme
+WorkingDirectory=/opt/filme/app
+EnvironmentFile=-/etc/default/filme
+ExecStart=/opt/filme/bin/scm bin/maintenance.scm --config /etc/filme/config.scm
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/var/lib/filme

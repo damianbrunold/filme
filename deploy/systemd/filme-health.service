@@ -1,0 +1,9 @@
+[Unit]
+Description=filme health probe (restarts filme if /healthz fails)
+After=filme.service
+
+[Service]
+Type=oneshot
+ExecCondition=/usr/bin/systemctl is-active --quiet filme.service
+# Port/host come from /etc/filme/config.scm; two strikes before a restart.
+ExecStart=/opt/filme/bin/healthcheck filme.service

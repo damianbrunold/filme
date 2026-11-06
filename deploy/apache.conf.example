@@ -1,0 +1,17 @@
+# Apache reverse proxy in front of filme (a2enmod proxy proxy_http ssl
+# headers). The app binds 127.0.0.1 only; Apache terminates TLS.
+<VirtualHost *:443>
+    ServerName filme.example.com
+
+    SSLEngine on
+    SSLCertificateFile    /etc/letsencrypt/live/filme.example.com/fullchain.pem
+    SSLCertificateKeyFile /etc/letsencrypt/live/filme.example.com/privkey.pem
+
+    # One upload chunk is 16 MiB.
+    LimitRequestBody 41943040
+    ProxyTimeout 300
+    ProxyPreserveHost On
+    ProxyPass        / http://127.0.0.1:8072/
+    ProxyPassReverse / http://127.0.0.1:8072/
+    RequestHeader set X-Forwarded-Proto "https"
+</VirtualHost>

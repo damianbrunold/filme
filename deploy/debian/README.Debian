@@ -1,0 +1,62 @@
+filme for Debian/Ubuntu
+=======================
+
+A small video portal for in-house tutorials: upload MP4 files, add title,
+description, tags and a thumbnail, and watch them in the browser. Public
+videos are open to everyone; restricted ones need a sign-in or the
+video's passphrase; drafts are visible to editors only.
+
+Layout
+  /opt/filme/app/               the app (bin, src, static)
+  /opt/filme/bin/scm            the dabscm runtime it was built with
+  /etc/filme/config.scm         the config (created on first install with a
+                                fresh secret, never overwritten; root:filme 0640)
+  /etc/default/filme            optional: JAVA_OPTS="-Xmx512m"
+  /var/lib/filme/               ALL data: back up this folder
+    videos/<id>/                meta.scm, video.mp4, thumb.jpg, thumb-sm.jpg
+    users.scm                   users, roles and password hashes
+    site/                       settings.scm (name, colours), logo, favicon
+    uploads/                    unfinished uploads (purged after a day)
+    trash/                      deleted videos (purged after 30 days)
+  /usr/bin/filme-admin          runs a tool from app/bin (as user filme)
+
+Services
+  filme.service                 the web app (127.0.0.1:8072 by default)
+  filme-health.timer            probes /healthz every minute, restarts the
+                                app after two failures
+  filme-maintenance.timer       nightly: purges stale uploads and old trash
+
+First install
+  1. sudo apt install ./filme_<version>_all.deb
+     (pulls in ffmpeg and a Java runtime; the service starts right away)
+  2. Create the first administrator:
+       sudo -u filme filme-admin user add <name> admin
+  3. Reverse proxy with TLS in front of 127.0.0.1:8072: see
+     nginx.conf.example / apache.conf.example in this directory.
+     Keep client_max_body_size >= 20m (one upload chunk is 16 MiB).
+  4. Sign in, upload videos, and set the site name, colours and logo
+     under "Darstellung".
+
+Tools (run as the filme user: sudo -u filme filme-admin <tool> ...)
+  user add <name> [viewer|editor|admin]   prompts for the password
+  user passwd|role|disable|enable|delete <name> ...
+  user list
+  import [--public|--restricted] [--tag t] <file-or-dir>...
+                                bulk-import MP4 files (a running server
+                                picks them up on its next request)
+  check [--fix] [--reprocess <id>|all]
+                                consistency check of the data folder
+  maintenance                   what the nightly timer runs
+
+Backup and restore
+  Everything lives in /var/lib/filme (plus /etc/filme/config.scm, whose
+  session-secret keeps sessions and passphrase unlocks valid). Copy or
+  rsync that folder, or snapshot the file system. To restore, stop the
+  service, copy the folder back (owner filme:filme) and start it again;
+  the index is rebuilt from the meta.scm files at startup.
+  The data format is described in /opt/filme/app/docs/DATA-FORMAT.md.
+
+Upgrades
+  sudo apt install ./filme_<newer>_all.deb restarts the services; the
+  config and the data are kept. Purging the package removes /etc/filme but
+  keeps /var/lib/filme and the system user.
