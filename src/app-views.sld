@@ -18,6 +18,7 @@
           (app site)
           (app store)
           (app theme)
+          (app tokens)
           (app users))
   (export admin-site-page
           admin-users-page
@@ -41,6 +42,7 @@
       '(("saved" success . "Gespeichert.")
         ("deleted" success . "Das Video wurde in den Papierkorb verschoben.")
         ("pw" success . "Passwort geändert.")
+        ("token-revoked" success . "Token widerrufen.")
         ("user-added" success . "Benutzer angelegt.")
         ("user-saved" success . "Benutzer gespeichert.")
         ("user-deleted" success . "Benutzer gelöscht.")
@@ -314,7 +316,7 @@ Description: \"m:ss\" or \"h:mm:ss\"."
                             (button (@ (type "submit") (class "primary"))
                                     "Anmelden")))))
 
-    (define (profile-page ctx msg)
+    (define (profile-page ctx msg . new-token)
       (let ((user (ctx-user ctx)))
         (page ctx "Profil"
               'profile
@@ -351,10 +353,69 @@ Description: \"m:ss\" or \"h:mm:ss\"."
                                          (required #t))))
                               (button (@ (type "submit") (class "primary"))
                                       "Passwort ändern"))
+                        ,(if (has-role? user 'editor)
+                             (tokens-section
+                              user
+                              (and (pair? new-token) (car new-token)))
+                             "")
                         (form (@ (method "post")
                                  (action ,(url "/logout"))
                                  (class "logout-form"))
-                              (button (@ (type "submit")) "Abmelden"))))))
+                              (button (@ (type "submit")) "Abmelden")))
+              "js/confirm.js")))
+
+    ;; Personal API tokens (for the aufnahme recorder's "Publish to filme").
+    (define (tokens-section user new-token)
+      `(div (@ (class "tokens"))
+            (h2 "API-Tokens")
+            (p (@ (class "hint"))
+               "Mit einem Token können Programme wie die Aufnahme-App in Ihrem Namen Videos "
+               "hochladen. Sie landen als Entwurf in der Übersicht.")
+            ,(if new-token
+                 `(div (@ (class "notice success new-token"))
+                       (p (strong
+                           "Neues Token – jetzt kopieren, es wird nicht wieder angezeigt:"))
+                       (input (@ (readonly #t)
+                                 (value ,new-token)
+                                 (class "token-value")
+                                 (aria-label "Neues Token"))))
+                 "")
+            ,(let ((ts (user-tokens user)))
+               (if (null? ts)
+                   '(p (@ (class "hint")) "Noch keine Tokens.")
+                   `(ul (@ (class "token-list"))
+                        ,@(map (lambda (t)
+                                 `(li (span
+                                       ,(alist-ref t 'label "Token")
+                                       (span
+                                        (@ (class "hint"))
+                                        ,(string-append
+                                          " · seit "
+                                          (format-date
+                                           (alist-ref t 'created 0)))))
+                                      (form
+                                       (@
+                                        (method "post")
+                                        (class "inline js-confirm")
+                                        (data-confirm
+                                         "Dieses Token widerrufen?")
+                                        (action
+                                         ,(url
+                                           (string-append "/profile/tokens/"
+                                                          (alist-ref t 'id)
+                                                          "/delete"))))
+                                       (button
+                                        (@ (type "submit") (class "danger"))
+                                        "Widerrufen"))))
+                               ts))))
+            (form (@ (method "post")
+                     (action ,(url "/profile/tokens"))
+                     (class "inline"))
+                  (input (@ (name "label")
+                            (placeholder "Bezeichnung, z. B. Aufnahme")
+                            (maxlength "60")
+                            (aria-label "Bezeichnung")))
+                  (button (@ (type "submit")) "Token erstellen"))))
 
     ;; --- the video grid ----------------------------------------------------
 

@@ -33,6 +33,7 @@
           (app site)
           (app store)
           (app theme)
+          (app tokens)
           (app uploads)
           (app users)
           (app videos)
@@ -103,6 +104,15 @@
             (let ((parts (string-split-char xff #\,)))
               (string-trim-both (list-ref parts (- (length parts) 1))))
             "local")))
+
+    ;; A string field of a parsed JSON object, trimmed and cut to max
+    ;; characters; "" when missing or not a string.
+    (define (json-text j key max)
+      (let ((v (json-ref j key "")))
+        (if (string? v)
+            (let ((t (string-trim-both v)))
+              (if (> (string-length t) max) (substring t 0 max) t))
+            "")))
 
     (define (string-trim-both s)
       (let* ((n (string-length s))
@@ -281,9 +291,18 @@ Description: Builds the app's request handler. settings is an alist:
                                      "/login?next="
                                      (url-path (http-request-url req)))))))))
 
+        ;; The API also accepts a personal token (Authorization: Bearer),
+        ;; for programs that upload on a user's behalf; pages never do.
+        (define (api-user req)
+          (or (current-user req)
+              (let
+                  ((tok (bearer-token (http-request-header req
+                                                           "Authorization"))))
+                (and tok (token-user users-file tok)))))
+
         (define (api-role role handler)
           (lambda (req params)
-            (let ((user (current-user req)))
+            (let ((user (api-user req)))
               (cond ((has-role? user role) (handler req params user))
                     (user (json-error 403 "forbidden"))
                     (else (json-error 401 "not signed in"))))))
@@ -521,6 +540,41 @@ Description: Builds the app's request handler. settings is an alist:
                        (html-response (profile-page (ctx user)
                                                     (msg-of req))))))
 
+        (route! "POST" "/profile/tokens"
+          (with-role 'editor
+            (lambda (req params user)
+              (let* ((label (string-trim-both
+                             (form-ref (http-request-form req) "label" "")))
+                     (label (if (string=? label "") "Token" label))
+                     (token (create-token!
+                             users-file
+                             (user-name user)
+                             (if (> (string-length label) 60)
+                                 (substring label 0 60)
+                                 label))))
+                (log-info "tokens"
+                          (string-append "token created by "
+                                         (user-name user)))
+                ;; Shown once, never redirected to (it would end up
+                ;; in the browser history).
+                (make-http-response 200
+                                    '(("Content-Type" .
+                                       "text/html; charset=utf-8")
+                                      ("Cache-Control" . "no-store"))
+                                    (profile-page
+                                     (ctx
+                                      (find-user users-file (user-name user)))
+                                     '(success . "Token erstellt.")
+                                     token))))))
+
+        (route! "POST" "/profile/tokens/:id/delete"
+          (with-role 'editor
+            (lambda (req params user)
+              (revoke-token! users-file
+                             (user-name user)
+                             (params-ref params "id"))
+              (redirect "/profile?m=token-revoked"))))
+
         (route! "POST" "/profile/password"
           (signed-in (lambda (req params user)
                        (let* ((form (http-request-form req))
@@ -757,7 +811,10 @@ Description: Builds the app's request handler. settings is an alist:
                     (lambda (req params user)
                       (let* ((u (own-upload user params))
                              (id (and u (alist-ref u 'id)))
-                             (part (and u (upload-part-path data-dir id))))
+                             (part (and u (upload-part-path data-dir id)))
+                             ;; Optional metadata for a new video:
+                             ;; {"title", "description", "tags"}.
+                             (info (or (parse-json-body req) '())))
                         (cond ((not u) (json-error 404 "no such upload"))
                               ((not (= (upload-offset data-dir id)
                                        (alist-ref u 'size)))
@@ -808,8 +865,46 @@ Description: Builds the app's request handler. settings is an alist:
                                             lib
                                             `((title
                                                .
-                                               ,(base-name-of
-                                                 (alist-ref u 'filename)))
+                                               ,(let
+                                                    ((t
+                                                      (json-text info "title"
+                                                                 200)))
+                                                  (if
+                                                   (string=? t "")
+                                                   (base-name-of
+                                                    (alist-ref u 'filename))
+                                                   t)))
+                                              (description
+                                               .
+                                               ,(json-text info "description"
+                                                           20000))
+                                              (tags
+                                               .
+                                               ,(let
+                                                    ((t
+                                                      (json-ref info "tags"
+                                                                "")))
+                                                  (normalize-tags
+                                                   (cond
+                                                    ((string? t) t)
+                                                    ((vector? t)
+                                                     (let loop
+                                                         ((xs
+                                                           (vector->list t))
+                                                          (acc ""))
+                                                       (cond
+                                                        ((null? xs) acc)
+                                                        ((string? (car xs))
+                                                         (loop
+                                                          (cdr xs)
+                                                          (string-append
+                                                           acc
+                                                           ","
+                                                           (car xs))))
+                                                        (else
+                                                         (loop (cdr xs)
+                                                               acc)))))
+                                                    (else "")))))
                                               (original-filename
                                                .
                                                ,(alist-ref u 'filename))

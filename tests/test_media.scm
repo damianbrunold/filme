@@ -148,11 +148,13 @@
         ((done (send "POST"
                      (string-append "/api/uploads/" id "/complete")
                      cookie
-                     #f)))
+                     "{\"title\":\"Git Grundlagen\",\"description\":\"Teil *1*\",\"tags\":[\"Git\",\"intro\"]}")))
       (test-equal 200 (http-response-status done))
       (let* ((vid (substring (utf8->string* (http-response-body done)) 10 21))
              (m (video-ref lib vid)))
-        (test-equal "Mein Clip" (alist-ref m 'title))
+        (test-equal "title from the request" "Git Grundlagen" (alist-ref m 'title))
+        (test-equal "Teil *1*" (alist-ref m 'description))
+        (test-equal '("git" "intro") (alist-ref m 'tags))
         (test-equal 'ready (alist-ref m 'status))
         (test-equal 'draft (alist-ref m 'visibility))
         (test-equal "ed" (alist-ref m 'created-by))

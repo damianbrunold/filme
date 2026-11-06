@@ -361,6 +361,56 @@
   (test-assert (has? (body (send app "GET" "/theme.css" #f))
                      "color-scheme: dark")))
 
+(test-group "API tokens"
+  (define (token-from page)
+    (let* ((i (string-contains-from page "value=\"fltk_" 0)))
+      (and i (substring page (+ i 7) (+ i 7 5 11 1 43)))))
+  (define (bearer tok) (list (cons "Authorization" (string-append "Bearer " tok))))
+  (define json-h '(("Content-Type" . "application/json")))
+  (parameterize ((password-pbkdf2-iterations fast-iterations))
+    (save-user! users-file "viv" (password-hash "viv password") 'viewer))
+  (test-equal "viewers cannot create tokens" 403
+              (status (send app "POST" "/profile/tokens" (login "viv" "viv+password") "label=x")))
+  (let* ((r (send app "POST" "/profile/tokens" ed "label=Aufnahme"))
+         (tok (token-from (body r))))
+    (test-equal 200 (status r))
+    (test-equal "shown once, not cached" "no-store" (http-response-header r "Cache-Control"))
+    (test-assert (string? tok))
+    (test-equal 60 (string-length tok))
+    (test-assert "listed on the profile" (has? (body (send app "GET" "/profile" ed)) "Aufnahme"))
+    (test-assert "but not the token itself" (not (has? (body (send app "GET" "/profile" ed)) tok)))
+    (let* ((r (send app "POST" "/api/uploads" #f "{\"filename\":\"t.mp4\",\"size\":4}"
+                    (append (bearer tok) json-h)))
+           (id (substring (body r) 7 18)))
+      (test-equal "upload with the token" 201 (status r))
+      (test-equal 200 (status (send app "PUT" (string-append "/api/uploads/" id "?offset=0") #f
+                                    (bytevector 1 2 3 4) (bearer tok))))
+      (test-equal "the upload belongs to the token's user" 200
+                  (status (send app "GET" (string-append "/api/uploads/" id) ed)))
+      (test-equal 415 (status (send app "POST" (string-append "/api/uploads/" id "/complete") #f
+                                    "{\"title\":\"X\"}" (append (bearer tok) json-h)))))
+    (test-equal "pages do not accept tokens" 303
+                (status (send app "GET" "/manage" #f #f (bearer tok))))
+    (test-equal 303 (status (send app "GET" "/admin/users" #f #f (bearer tok))))
+    (test-equal "a wrong secret" 401
+                (status (send app "POST" "/api/uploads" #f "{}"
+                              (append (bearer (string-append (substring tok 0 50) "xxxxxxxxx")) json-h))))
+    (test-equal 401 (status (send app "POST" "/api/uploads" #f "{}"
+                                  (append (bearer "nonsense") json-h))))
+    (let* ((u (find-user users-file "ed"))
+           (tid (alist-ref (car (alist-ref u 'tokens)) 'id)))
+      (test-equal "/profile?m=token-revoked"
+                  (location (send app "POST" (string-append "/profile/tokens/" tid "/delete") ed "")))
+      (test-equal "revoked" 401
+                  (status (send app "POST" "/api/uploads" #f "{\"filename\":\"t.mp4\",\"size\":4}"
+                                (append (bearer tok) json-h))))))
+  (let ((tok (token-from (body (send app "POST" "/profile/tokens" ed "label=B")))))
+    (send app "POST" "/admin/users/ed" ada "op=disable")
+    (test-equal "a disabled user's token stops working" 401
+                (status (send app "POST" "/api/uploads" #f "{\"filename\":\"t.mp4\",\"size\":4}"
+                              (append (bearer tok) json-h))))
+    (send app "POST" "/admin/users/ed" ada "op=enable")))
+
 (test-group "url prefix"
   (let* ((app (app-with "/filme"))
          (r (send app "POST" "/filme/login" #f

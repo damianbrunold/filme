@@ -62,6 +62,7 @@ src/app-site.sld      URL prefix: url, asset, cookie-path
 src/app-store.sld     atomic data files, ids, the data-dir lock
 src/app-users.sld     users.scm and roles
 src/app-auth.sld      sign-in, sessions (signed SameSite=Lax cookies), passwords
+src/app-tokens.sld    personal API tokens (Bearer) for the upload API
 src/app-access.sld    who may see which video; passphrase unlock cookies
 src/app-videos.sld    video metadata, in-memory index, search, trash
 src/app-uploads.sld   chunked, resumable uploads
@@ -75,6 +76,27 @@ deploy/               systemd units, nginx/apache examples, README.Debian
 docs/DATA-FORMAT.md   the data folder, file by file
 package-deb.scm       builds the Debian package
 ```
+
+## API tokens
+
+Programs can upload videos on a user's behalf with a personal API token,
+for example the [aufnahme](../aufnahme) recorder's "In filme
+veröffentlichen".
+- **Creating:** editors and admins create tokens on their profile page
+  (`/profile`). A token is shown once, at creation; only a SHA-256 hash of
+  it is stored in `users.scm`.
+- **Using:** send it as `Authorization: Bearer fltk_...`.
+- **Where it works:** only on the upload and video API:
+  - `POST /api/uploads`, `PUT /api/uploads/:id?offset=N`;
+  - `POST /api/uploads/:id/complete`, with optional JSON `{"title",
+    "description", "tags"}`;
+  - `GET /api/videos/:id`.
+
+  Pages, settings and user admin never accept a token.
+- **Result:** uploaded videos arrive as drafts, created by the token's
+  user.
+- **Revoking:** revoke tokens on the profile page. Disabling or deleting
+  the user also ends their tokens.
 
 ## Security notes
 

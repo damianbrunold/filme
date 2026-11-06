@@ -226,3 +226,10 @@ label.color { display: flex; align-items: center; gap: 0.6rem; margin: 0; font-w
 .logo-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; margin: 0.75rem 0; }
 .logo-row > strong { min-width: 5rem; }
 .logo-preview { height: 2.5rem; width: auto; background: var(--bg); border: 1px solid var(--border); border-radius: 0.3rem; padding: 0.2rem; }
+
+/* --- API tokens (profile) ------------------------------------------------ */
+
+.tokens { margin-top: 1.5rem; }
+.token-list { list-style: none; padding: 0; margin: 0 0 1rem; }
+.token-list li { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; padding: 0.4rem 0; border-bottom: 1px solid var(--border); }
+.new-token input { font-family: ui-monospace, monospace; font-size: 0.85rem; }
