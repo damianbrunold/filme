@@ -20,6 +20,9 @@
 }
 
 * { box-sizing: border-box; }
+/* Components set display (e.g. buttons: inline-flex), which would
+   otherwise override the hidden attribute. */
+[hidden] { display: none !important; }
 
 body {
   margin: 0;
